@@ -1,0 +1,199 @@
+--all stuff relating to controls
+
+--this module uses oop to store user settings: 
+--profiles are imported from the server then stored here for the other modules to use
+
+local m = {
+	
+	customSettings = {};
+	--asterisks indicate a custom action table
+	--underscores indicate duplicate keys
+	defaultSettings = {
+		["Fire"] = Enum.UserInputType.MouseButton1;
+		["Aim"] = Enum.UserInputType.MouseButton2;
+		["Sprint"] = Enum.KeyCode.LeftShift;
+		
+		["ReleaseMouse"] = Enum.KeyCode.LeftControl;
+		
+		["Reload"] = Enum.KeyCode.R;
+		
+		["Weapon1"] = Enum.KeyCode.One;
+		["Weapon2"] = Enum.KeyCode.Two;
+		["Weapon3"] = Enum.KeyCode.Three;
+		["Weapon4"] = Enum.KeyCode.Four;
+		["Weapon5"] = Enum.KeyCode.Five;
+		["Weapon6"] = Enum.KeyCode.Six;
+		
+		["Test"] = Enum.KeyCode.T;
+		["Test2"] = Enum.KeyCode.Y;
+	};
+	
+	actionTable = {};
+	--actionName = {actionName, startFuncs, endFuncs}
+	pullingTable = {}; --version of the table with enums as indexes for input reasons
+	--enum = {actionName, startFuncs, endFuncs}
+	--these are unique for the drag funcs
+	
+	platform = nil;
+	
+}
+--set inheritance for default controls
+setmetatable(m.customSettings, m.defaultSettings)
+m.defaultSettings.__index = m.defaultSettings
+
+--determine device category
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
+local function getPlatform()
+	if (GuiService:IsTenFootInterface()) then
+		return "Console"
+	elseif (UserInputService.TouchEnabled and not UserInputService.MouseEnabled) then
+		return "Mobile"
+	else
+		return "Desktop"
+	end
+end
+m.platform = getPlatform()
+
+
+--these 3 core functions are used to control key binding, just access these!
+
+function m.attachAction(actionName, functionName, inputState, func)
+	local actionArray = m.actionTable[actionName]
+	if actionArray then
+		local stateArray = actionArray[inputState]
+		if not stateArray then --create array if not done alr
+			stateArray = {}
+			actionArray[inputState] = stateArray
+		end
+		stateArray[functionName] = func
+	else
+		warn("Invalid name ", actionName)
+	end
+end
+
+function m.detachAction(actionName, functionName, inputState)
+	local actionArray = m.actionTable[actionName]
+	if actionArray then
+		local stateArray = actionArray[inputState]
+		if stateArray then
+			stateArray[functionName] = nil
+		end
+	else
+		warn("Invalid name ", actionName)
+	end
+end
+
+--use to manually trigger actions using gui
+function m.triggerAction(actionName, inputState) --NOT DONE
+	local actionArray = m.actionTable[actionName]
+	if actionArray then
+		--if inputstate is given, do that array only
+		if inputState then
+			
+		else --else do everything in the array
+			
+		end
+	else
+		warn("Invalid name ", actionName)
+	end
+end
+
+
+
+local function testKeyCode(string  : string) : Enum.KeyCode
+	return Enum.KeyCode[string]
+end
+local function enumify(string : string) : Enum.KeyCode | Enum.UserInputType
+	local successful, enum = pcall(testKeyCode, string)
+	if successful then return enum end
+	return Enum.UserInputType[string]
+end
+local function stringify(enum : Enum.KeyCode | Enum.UserInputType) : string
+	local str = tostring(enum)
+	local int = string.find(str, ".", 6, true)+1
+	return string.sub(str, int)
+end
+
+--create empty action tables
+function m.initialize()
+	for actionName, _ in pairs(m.defaultSettings) do
+		--detect exceptions
+		local firstChar = string.sub(actionName,1,1)
+		if firstChar == "_" then
+			continue --skip it, the original one will get a table
+		elseif firstChar == "*" then
+			continue
+		end
+		local actionTable = {}
+		m.actionTable[actionName] = actionTable
+		actionTable.actionName = actionName 
+		--not sure if needed yet
+		
+	end
+end
+
+--create pulling table from settings
+function m.interpret()
+	
+	local pull = {}
+	m.pullingTable = pull
+	for actionName, _ in pairs(m.defaultSettings) do
+		local actionKey = m.customSettings[actionName]
+		
+		--detect exceptions
+		local firstChar = string.sub(actionName,1,1)
+		if firstChar == "_" then
+			actionName = string.gsub(actionName, "_", "")
+		elseif firstChar == "*" then
+			continue
+		end
+		m.pullingTable[actionKey] = m.actionTable[actionName]
+		
+	end
+end
+
+--require modules
+
+task.spawn(function()
+	if true then return end
+	local datastore = _G.Replicated.Datastore
+
+	local controls = datastore.Controls
+	for action, keycode in pairs(controls) do
+		m.customSettings[action] = enumify(keycode)
+	end
+	
+	m.interpret()
+end)
+
+m.initialize()
+m.interpret()
+
+--start pulling controls
+local function onInput(input, _gameProcessed)
+
+	local parse = input.UserInputType
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		parse = input.KeyCode
+	end
+
+	local controlArray = m.pullingTable[parse]
+
+	if controlArray then
+		local funcs = controlArray[input.UserInputState]
+		if funcs then
+			for _, func in pairs(funcs) do
+				func()
+			end
+		end
+	end
+
+end
+UserInputService.InputBegan:Connect(onInput)
+UserInputService.InputEnded:Connect(onInput)
+
+--subscripts will then attach actions to every control
+
+
+return m
